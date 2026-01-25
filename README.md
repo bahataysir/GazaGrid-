@@ -1,4 +1,4 @@
-# 🌍 GazaGrid: Resilient Quantum Energy Optimizer
+# 🌍 GazaGrid: Resilient Quantum Energy Optimizer 
 
 ## Overview
 
