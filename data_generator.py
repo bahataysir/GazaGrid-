@@ -347,8 +347,8 @@ class GazaRealisticDataGenerator:
             return 4  # Coastal urban corridor
         else:
             return self.rng.choice([3, 4], p=[0.6, 0.4])
-    # MAIN DATA GENERATION
-    def generate_dataset(self, n_points: int = 100,spatial_strategy: str = "stratified") -> pd.DataFrame:
+     # MAIN DATA GENERATION
+        def generate_dataset(self, n_points: int = 100,spatial_strategy: str = "stratified") -> pd.DataFrame:
         """
         Generate comprehensive Gaza energy potential dataset.
         Args:
@@ -356,5 +356,147 @@ class GazaRealisticDataGenerator:
             spatial_strategy: Sampling strategy:
                 - "uniform": Uniform random across Gaza
                 - "stratified": Weighted by population density
-                - "grid": Regular grid (for systematic cover
-                
+                - "grid": Regular grid (for systematic coverage)
+        Returns:
+            pandas.DataFrame with columns:
+                ['site_id', 'latitude', 'longitude', 'solar_kwh', 'wind_mps',
+                 'risk_score', 'accessibility', 'grid_distance_m', 'land_cost',
+                 'infrastructure_level', 'region', 'generation_hash']
+        Note:
+            Includes cryptographic hash for data integrity verification.
+        """
+        self.logger.info(f"Generating dataset with {n_points} points")
+        data_records = []
+        for i in range(n_points):
+            # Generate coordinate based on sampling strategy
+            if spatial_strategy == "stratified":
+                # Bias toward population centers (Gaza City, Khan Younis)
+                lat = self._generate_stratified_latitude()
+                lon = self._generate_stratified_longitude()
+            elif spatial_strategy == "grid":
+                # Regular grid sampling
+                lat, lon = self._generate_grid_coordinate(i, n_points)
+            else:  # uniform
+                lat = self.rng.uniform(self.GAZA_BOUNDS['lat_min'], 
+                                      self.GAZA_BOUNDS['lat_max'])
+                lon = self.rng.uniform(self.GAZA_BOUNDS['lon_min'], 
+                                      self.GAZA_BOUNDS['lon_max'])
+            point = GazaCoordinate(lat, lon)
+            # Generate features
+            solar = self._generate_solar_potential(point)
+            wind = self._generate_wind_potential(point)
+            risk = self.calculate_composite_risk_score(point)
+            accessibility_status = self.assess_accessibility(point)
+            land_cost = self._estimate_land_cost(point, risk)
+            infra_level = self._estimate_infrastructure_level(point)
+            # Grid distance (simulated)
+            grid_distance = self._simulate_grid_distance(point, accessibility_status) 
+            # Accessibility as boolean (True if fully accessible)
+            accessible = (accessibility_status == AccessibilityStatus.FULLY_ACCESSIBLE)
+            record = {'site_id': f"GZ_{i:04d}",'latitude': lat,'longitude': lon,'solar_kwh': solar,'wind_mps': wind,'risk_score': risk,'accessibility': accessible,'accessibility_detail': accessibility_status.value,'grid_distance_m': grid_distance,'land_cost_usd_m2': land_cost,'infrastructure_level': infra_level,'region': self._classify_region(point),'generation_timestamp': datetime.now().isoformat(),'data_version': '1.0'}
+            data_records.append(record)
+            # Progress logging
+            if (i + 1) % 10 == 0:
+                self.logger.info(f"Generated {i + 1}/{n_points} points")
+        # Create DataFrame
+        df = pd.DataFrame(data_records)
+        # Add data integrity hash
+        self._data_hash = self._compute_data_hash(df)
+        df.attrs['generation_hash'] = self._data_hash
+        df.attrs['generation_seed'] = self.seed
+        df.attrs['generation_strategy'] = spatial_strategy
+        self.logger.info(f"Dataset generated successfully. Hash: {self._data_hash[:16]}...")
+        self._print_summary_statistics(df)
+        return df
+    # HELPER METHODS
+    def _generate_stratified_latitude(self) -> float:
+        # Generate latitude biased toward population center
+        # Gaza City (31.52°N) and Khan Younis (31.35°N) are largest population centers
+        centers = [31.52, 31.35]  # Gaza City, Khan Younis
+        weights = [0.4, 0.3]      # 70% probability in these centers
+        if self.rng.random() < 0.7:
+            center = self.rng.choice(centers, p=np.array(weights)/sum(weights))
+            # Gaussian around center with σ=0.05° (~5.5km)
+            lat = center + self.rng.normal(0, 0.05)
+        else:
+            # Uniform elsewhere
+            lat = self.rng.uniform(self.GAZA_BOUNDS['lat_min'], 
+                                  self.GAZA_BOUNDS['lat_max'])
+        return np.clip(lat, self.GAZA_BOUNDS['lat_min'], self.GAZA_BOUNDS['lat_max'])
+    def _generate_stratified_longitude(self) -> float:
+        # Generate longitude with coastal bias
+        # 60% probability in coastal zone (<34.35°E)
+        if self.rng.random() < 0.6:
+            lon = self.rng.uniform(self.GAZA_BOUNDS['lon_min'], 34.35)
+        else:
+            lon = self.rng.uniform(34.35, self.GAZA_BOUNDS['lon_max'])
+        return lon
+    def _generate_grid_coordinate(self, index: int, total: int) -> Tuple[float, float]:
+        # Generate coordinates on a regular grid
+        # Simple grid decomposition
+        grid_size = int(np.sqrt(total))
+        row = index // grid_size
+        col = index % grid_size
+        lat_step = (self.GAZA_BOUNDS['lat_max'] - self.GAZA_BOUNDS['lat_min']) / grid_size
+        lon_step = (self.GAZA_BOUNDS['lon_max'] - self.GAZA_BOUNDS['lon_min']) / grid_size
+        lat = self.GAZA_BOUNDS['lat_min'] + (row + 0.5) * lat_step
+        lon = self.GAZA_BOUNDS['lon_min'] + (col + 0.5) * lon_step
+        return lat, lon
+    def _simulate_grid_distance(self, point: GazaCoordinate, accessibility: AccessibilityStatus) -> int:
+        # Simulate distance to nearest grid connection
+        # Base distance based on infrastructure level
+        if accessibility == AccessibilityStatus.FULLY_ACCESSIBLE:
+            base_dist = self.rng.randint(100, 2000)
+        elif accessibility == AccessibilityStatus.TEMPORARILY_INACCESSIBLE:
+            base_dist = self.rng.randint(500, 3000)
+        else:
+            base_dist = self.rng.randint(1000, 5000)
+        # Add noise
+        return base_dist + self.rng.randint(-200, 200)
+    def _classify_region(self, point: GazaCoordinate) -> str:
+        # Classify point into Gaza administrative region
+        if point.latitude > 31.50:
+            return "North_Gaza"
+        elif point.latitude > 31.45:
+            return "Gaza_City"
+        elif point.latitude > 31.40:
+            return "Deir_al_Balah"
+        elif point.latitude > 31.35:
+            return "Khan_Younis"
+        else:
+            return "Rafah"
+    def _compute_data_hash(self, df: pd.DataFrame) -> str:
+        # Compute SHA-256 hash of dataset for integrity checking
+        # Convert to JSON string (excluding metadata)
+        data_str = df.to_json(orient='records', sort_keys=True)
+        return hashlib.sha256(data_str.encode()).hexdigest()
+    def _print_summary_statistics(self, df: pd.DataFrame):
+        # Print comprehensive dataset statistics
+        print("\n" + "="*60)
+        print("GAZA ENERGY DATASET SUMMARY")
+        print("="*60)
+        print(f"\n Dataset Size: {len(df)} points")
+        print(f"Spatial Coverage: Gaza Strip ({self.GAZA_BOUNDS})")
+        print("\nRisk Distribution:")
+        risk_stats = df['risk_score'].describe(percentiles=[0.25, 0.5, 0.75])
+        print(f"   Min: {risk_stats['min']:.1f}, Mean: {risk_stats['mean']:.1f}, "
+              f"Max: {risk_stats['max']:.1f}")
+        print(f"   High risk (≥7): {(df['risk_score'] >= 7).sum()} sites")
+        print("\n Energy Potential:")
+        print(f"   Solar: {df['solar_kwh'].mean():.2f} ± {df['solar_kwh'].std():.2f} kWh/m²/day")
+        print(f"   Wind: {df['wind_mps'].mean():.2f} ± {df['wind_mps'].std():.2f} m/s")
+        print("\n Accessibility:")
+        accessible_count = df['accessibility'].sum()
+        print(f"   Fully accessible: {accessible_count} ({accessible_count/len(df)*100:.1f}%)")
+        print("\n Economic Factors:")
+        print(f"  Avg land cost: ${df['land_cost_usd_m2'].mean():.0f}/m²")
+        print(f"  Infrastructure level (1-5): {df['infrastructure_level'].mean():.1f}")
+        print("\n Regional Distribution:")
+        region_counts = df['region'].value_counts()
+        for region, count in region_counts.items():
+            percentage = count / len(df) * 100
+            print(f"   {region}: {count} sites ({percentage:.1f}%)")
+        print("\n Data Integrity:")
+        print(f" Generation hash: {self._data_hash[:16]}...")
+        print(f" Seed: {self.seed}")
+        print("_"*60)
