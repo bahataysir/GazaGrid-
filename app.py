@@ -398,4 +398,126 @@ class GazaGridDashboard:
         for algo_name, algo_result in results['algorithms'].items():
             accessible = sum(1 for s in algo_result['sites'] if s['Accessibility'] == 1)
             accessible_counts.append(go.Bar(x=[algo_name.upper()],y=[accessible],name=algo_name.upper()))
-        
+        for trace in accessible_counts:
+            fig.add_trace(trace, row=2, col=2)
+        fig.update_layout(height=800, showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
+        # Impact analysis
+        st.subheader("Practical Impact Assessment")
+        if 'quantum' in results['algorithms']:
+            quantum_sites = results['algorithms']['quantum']['sites']
+            total_solar = sum(s['Solar_Irradiance'] for s in quantum_sites)
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                # Estimate power generation (simplified)
+                estimated_power = total_solar * 100  # kW approximation
+                st.metric("Estimated Power", f"{estimated_power:.0f} kW")
+            with col2:
+                households = int(estimated_power / 2)  # 2 kW per household
+                st.metric("Households Served", f"{households:,}")
+            with col3:
+                co2_reduction = estimated_power * 0.5  # tons CO2/year per kW
+                st.metric("CO₂ Reduction", f"{co2_reduction:.0f} tons/year")
+    def display_export(self, results):
+        # Export functionality
+        st.header("Export Research Results")
+        st.markdown("""
+        ### Generate Publication-Ready Materials
+        Export your optimization results in formats suitable for academic publications,
+        technical reports, or stakeholder presentations.
+        """)
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("Export to LaTeX", use_container_width=True):
+                latex_content = self.generate_latex(results)
+                st.download_button(label="Download LaTeX",data=latex_content,file_name="gazagrid_results.tex",mime="text/plain")
+        with col2:
+            if st.button("Export to CSV", use_container_width=True):
+                csv_content = self.generate_csv(results)
+                st.download_button(label="Download CSV",data=csv_content,file_name="gazagrid_results.csv",mime="text/csv")
+        with col3:
+            if st.button("Export to JSON", use_container_width=True):
+                json_content = self.generate_json(results)
+                st.download_button(label="Download JSON",data=json_content,file_name="gazagrid_results.json",mime="application/json")
+        # Display preview
+        st.subheader("Results Preview")
+        with st.expander("LaTeX Table Preview"):
+            st.code(self.generate_latex(results), language='latex')
+        with st.expander("Data Summary"):
+            if results['algorithms']:
+                summary_df = pd.DataFrame([{'Algorithm': algo.upper(),'Energy': algo_result['energy'],'Sites': len(algo_result['selected']),'Avg Risk': np.mean([s['Risk_Score'] for s in algo_result['sites']]),'Avg Solar': np.mean([s['Solar_Irradiance'] for s in algo_result['sites']])}for algo, algo_result in results['algorithms'].items()])
+                st.dataframe(summary_df, use_container_width=True)
+    def generate_latex(self, results):
+        # Generate LaTeX table
+        latex = """\\begin{table}[ht]
+\\centering
+\\caption{Performance comparison of optimization algorithms for Gaza energy site selection.}
+\\label{tab:gazagrid_results}
+\\begin{tabular}{lcccc}
+\\hline
+\\textbf{Algorithm} & \\textbf{Energy Score} & \\textbf{Sites} & \\textbf{Avg. Risk} & \\textbf{Avg. Solar} \\\\
+\\hline
+"""
+        for algo_name, algo_result in results['algorithms'].items():
+            avg_risk = np.mean([s['Risk_Score'] for s in algo_result['sites']])
+            avg_solar = np.mean([s['Solar_Irradiance'] for s in algo_result['sites']])
+            latex += f"{algo_name.replace('_', ' ').title()} & "
+            latex += f"{algo_result['energy']:.3f} & "
+            latex += f"{len(algo_result['selected'])} & "
+            latex += f"{avg_risk:.1f} & "
+            latex += f"{avg_solar:.1f} \\\\\n"
+        latex += """\\hline
+\\end{tabular}
+\\end{table}"""
+        return latex
+    def generate_csv(self, results):
+        # Generate CSV data
+        output = io.StringIO()
+        # Write algorithm comparison
+        comparison_data = []
+        for algo_name, algo_result in results['algorithms'].items():
+            comparison_data.append({'algorithm': algo_name,'energy_score': algo_result['energy'],'num_sites': len(algo_result['selected'])'selected_sites': ','.join(map(str, algo_result['selected'])),'optimal': algo_result.get('optimal', False)})
+        pd.DataFrame(comparison_data).to_csv(output, index=False)
+        return output.getvalue()
+    def generate_json(self, results):
+        # Generate JSON output
+        output = {'timestamp': datetime.now().isoformat(),'parameters': results['parameters'],'algorithms': {},'metadata': {'project': 'GazaGrid','version': '1.0','citation': 'GazaGrid: Quantum-Classical Optimization for Humanitarian Energy Planning (2024)'}}
+        for algo_name, algo_result in results['algorithms'].items():
+            output['algorithms'][algo_name] = {'energy': algo_result['energy'],'selected_sites': algo_result['selected'],'site_details': algo_result['sites'],'optimal': algo_result.get('optimal', False)}
+        return json.dumps(output, indent=2)
+    def display_instructions(self):
+        # Display instructions when no results
+        st.markdown("""
+        <div class="paper-section">
+        <h3> Getting Started</h3>
+        Welcome to the GazaGrid Research Dashboard. To begin your analysis:
+        1. **Configure** your research parameters in the sidebar
+        2. **Generate** or load a dataset of candidate energy sites
+        3. **Select** which optimization algorithms to compare
+        4. **Run** the quantum-classical optimization
+        5. **Analyze** results across multiple tabs
+        ### Key Features:
+        - **Quantum QAOA**: State-of-the-art quantum optimization
+        - **Classical Baselines**: Multiple algorithms for comparison
+        - **Geographic Visualization**: Interactive Gaza map
+        - **Statistical Analysis**: Publication-ready metrics
+        - **Export Functionality**: LaTeX, CSV, JSON outputs
+        ### Research Impact:
+        This tool enables evidence-based decision making for renewable energy
+        deployment in conflict zones, with direct application to the Gaza Strip's
+        energy crisis
+        *Configure your parameters in the sidebar and click "Run Quantum Optimization" to begin.*
+        </div>
+        """, unsafe_allow_html=True)
+# MAIN APPLICATION
+def main():
+    # Main application entry point
+    try:
+        dashboard = GazaGridDashboard()
+        dashboard.display_dashboard()
+    except Exception as e:
+        st.error(f"Application error: {str(e)}")
+        st.exception(e)
+if __name__ == "__main__":
+    main()
+```
