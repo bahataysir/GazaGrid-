@@ -123,7 +123,7 @@ not available in purely classical approaches.
 ## Gaza-Specific Innovations
 
 ### Conflict-Aware Risk Modeling
-
+![Wind / Renewable Energy](https://github.com/bahataysir/GazaGrid-/blob/main/200w.webp?raw=true)
 GazaGrid integrates **region-specific risk factors** derived from humanitarian
 and conflict assessment reports (e.g., UN OCHA) directly into the optimization
 pipeline.
@@ -248,7 +248,7 @@ print(f"Approximation guarantee: {qaoa_guarantee(2):.1%}")
 # Output: Approximation guarantee: 80.0%
 ```
 ## Hackathon Demo Script (5 Minutes)
-
+![Coding Humor / Meme](https://github.com/bahataysir/GazaGrid-/blob/main/200.webp?raw=true)
 ### Minute 1: The Crisis
 
 ```bash
