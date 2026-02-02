@@ -11,6 +11,7 @@
 **Quantum Computing Visualization**  
 ![Quantum Computing](https://media.giphy.com/media/spd98izrT5mITEAhep/giphy.gif)
 
+
 This project introduces a **Quantum–Classical Hybrid Optimization framework**, leveraging the **Quantum Approximate Optimization Algorithm (QAOA)** to support **humanitarian energy infrastructure planning** under extreme constraints such as risk, accessibility, and grid distance.
 
 > **Key Contribution:**  
